@@ -78,14 +78,14 @@ fun RowScope.TopBarButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun AddReminderBar(newValue: String, onValueChange: (String) -> Unit, date: Long, time: Pair<Int, Int>, onSetDate: () -> Unit, onSetTime: () -> Unit) {
+fun AddReminderBar(newValue: String, onValueChange: (String) -> Unit, date: Long, time: Pair<Int, Int>, onSetDate: () -> Unit, onSetTime: () -> Unit, onCreate: () -> Unit) {
     Column(
         modifier=Modifier
             .background(color=MaterialTheme.colorScheme.primaryContainer)
             .padding(PaddingValues(8.dp, 0.dp))
             .fillMaxWidth()
     ) {
-        Spacer(modifier=Modifier.height(16.dp))
+        Spacer(modifier=Modifier.height(32.dp))
         Text("Add Reminder", color=MaterialTheme.colorScheme.primary, fontSize=24.sp)
         Spacer(modifier=Modifier.height(8.dp))
         OutlinedTextField(value=newValue, onValueChange=onValueChange, modifier=Modifier.padding(PaddingValues(8.dp, 0.dp)).fillMaxWidth())
@@ -93,7 +93,7 @@ fun AddReminderBar(newValue: String, onValueChange: (String) -> Unit, date: Long
         Row() {
             TopBarButton("Set Date", onClick=onSetDate)
             TopBarButton("Set Time", onClick=onSetTime)
-            TopBarButton("Create") {}
+            TopBarButton("Create", onClick=onCreate)
         }
         Spacer(modifier=Modifier.height(8.dp))
         DateInfo(date)
@@ -152,12 +152,13 @@ fun TimePickerModal(onTimeSelected: (Int, Int)->Unit, onDismiss: ()->Unit) {
 }
 
 @Composable
-fun ReminderEntry(value: String, onClick: ()->Unit) {
+fun ReminderEntry(value: String, date: Long, time: Pair<Int, Int>, onClick: ()->Unit) {
     Card(modifier=Modifier.padding(8.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically, modifier=Modifier.padding(8.dp)) {
             Column(modifier=Modifier.weight(1f)) {
                 Text(value)
-                // TODO: add DateInfo and TimeInfo
+                DateInfo(date)
+                TimeInfo(time)
             }
             Button(onClick=onClick) {
                 Text("Clear")
@@ -193,6 +194,11 @@ fun AppLayout() {
     var chosenDate by remember {mutableStateOf(Date().toInstant().toEpochMilli())}
     var chosenTime by remember {mutableStateOf(Pair<Int, Int>(0, 0))}
 
+    var reminderSet by remember {mutableStateOf(false)}
+    var reminderLabel by remember {mutableStateOf("")}
+    var reminderDate by remember {mutableStateOf(Date().toInstant().toEpochMilli())}
+    var reminderTime by remember {mutableStateOf(Pair<Int, Int>(0, 0))}
+
     if (openDialog == OpenDialog.DATE) {
         DatePickerModal({
             if (it != null) {
@@ -207,19 +213,22 @@ fun AppLayout() {
     }
 
     Scaffold(modifier = Modifier.fillMaxSize().displayCutoutPadding(), topBar = {
-//        TopAppBar(
-//            title={Text("Add Reminder")},
-//            colors=TopAppBarDefaults.topAppBarColors(
-//                containerColor=MaterialTheme.colorScheme.primaryContainer,
-//                titleContentColor=MaterialTheme.colorScheme.primary
-//            )
-//        )
-        AddReminderBar(newReminderValue, {newReminderValue = it}, chosenDate, chosenTime, {openDialog=OpenDialog.DATE}, {openDialog=OpenDialog.TIME})
+        if (reminderSet) {
+            return@Scaffold
+        }
+        AddReminderBar(newReminderValue, {newReminderValue = it}, chosenDate, chosenTime, {openDialog=OpenDialog.DATE}, {openDialog=OpenDialog.TIME}, onCreate={
+            reminderLabel = newReminderValue
+            reminderDate = chosenDate
+            reminderTime = chosenTime
+            reminderSet = true
+        })
     }) { innerPadding ->
         LazyColumn(modifier=Modifier.padding(innerPadding).padding(8.dp)) {
-            item {
-                ReminderEntry("Do the dishes") {
-                    // Clear button code goes here
+            if (reminderSet) {
+                item {
+                    ReminderEntry(reminderLabel, reminderDate, reminderTime) {
+                        reminderSet = false
+                    }
                 }
             }
         }
