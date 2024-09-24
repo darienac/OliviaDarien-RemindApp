@@ -29,6 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -41,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,8 +52,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oliviadarien_remindapp.ui.theme.OliviaDarienRemindAppTheme
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,9 +91,10 @@ fun AddReminderBar(newValue: String, onValueChange: (String) -> Unit, date: Long
             .background(color=MaterialTheme.colorScheme.primaryContainer)
             .padding(PaddingValues(8.dp, 0.dp))
             .fillMaxWidth()
+
     ) {
         Spacer(modifier=Modifier.height(32.dp))
-        Text("Add Reminder", color=MaterialTheme.colorScheme.primary, fontSize=24.sp)
+        Text(text="Add Reminder", color=MaterialTheme.colorScheme.primary, fontSize=24.sp,  modifier = Modifier.padding(start=8.dp))
         Spacer(modifier=Modifier.height(8.dp))
         OutlinedTextField(value=newValue, onValueChange=onValueChange, modifier=Modifier.padding(PaddingValues(8.dp, 0.dp)).fillMaxWidth())
         Spacer(modifier=Modifier.height(8.dp))
@@ -156,11 +164,11 @@ fun ReminderEntry(value: String, date: Long, time: Pair<Int, Int>, onClick: ()->
     Card(modifier=Modifier.padding(8.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically, modifier=Modifier.padding(8.dp)) {
             Column(modifier=Modifier.weight(1f)) {
-                Text(value)
+                Text(text=value,  modifier = Modifier.padding(start=8.dp))
                 DateInfo(date)
                 TimeInfo(time)
             }
-            Button(onClick=onClick) {
+            Button(onClick=onClick,  modifier = Modifier.padding(start=8.dp)) {
                 Text("Clear")
             }
         }
@@ -169,21 +177,21 @@ fun ReminderEntry(value: String, date: Long, time: Pair<Int, Int>, onClick: ()->
 
 @Composable
 fun DateInfo(date: Long) {
-    val format = SimpleDateFormat("dd/M/yyyy")
-    Text(format.format(date))
+    // display the date accurately based on the user's locale
+    val format = SimpleDateFormat("MM/dd/yyyy", Locale.getDefault())
+    format.timeZone = TimeZone.getDefault()
+    Text(text="Date: " + format.format(Date(date+5*(3600000))), modifier = Modifier.padding(start=8.dp))
 }
 
 @Composable
 fun TimeInfo(data: Pair<Int, Int>) {
-    var hours = data.first.toString()
-    if (hours.length == 1) {
-        hours = "0$hours";
+    val calendar = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, data.first)
+        set(Calendar.MINUTE, data.second)
     }
-    var minutes = data.second.toString()
-    if (minutes.length == 1) {
-        minutes = "0$minutes";
-    }
-    Text("$hours:$minutes")
+    // 12 hour format
+    val format = SimpleDateFormat("hh:mm a", Locale.getDefault())
+    Text(text="Time: " + format.format(calendar.time), modifier = Modifier.padding(start=8.dp))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -199,6 +207,9 @@ fun AppLayout() {
     var reminderDate by remember {mutableStateOf(Date().toInstant().toEpochMilli())}
     var reminderTime by remember {mutableStateOf(Pair<Int, Int>(0, 0))}
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     if (openDialog == OpenDialog.DATE) {
         DatePickerModal({
             if (it != null) {
@@ -212,15 +223,32 @@ fun AppLayout() {
         }, {openDialog = OpenDialog.NONE})
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize().displayCutoutPadding(), topBar = {
+    Scaffold(modifier = Modifier.fillMaxSize().displayCutoutPadding(), snackbarHost = { SnackbarHost(hostState = snackbarHostState) }, topBar = {
         if (reminderSet) {
             return@Scaffold
         }
         AddReminderBar(newReminderValue, {newReminderValue = it}, chosenDate, chosenTime, {openDialog=OpenDialog.DATE}, {openDialog=OpenDialog.TIME}, onCreate={
-            reminderLabel = newReminderValue
-            reminderDate = chosenDate
-            reminderTime = chosenTime
-            reminderSet = true
+            if (newReminderValue.isNotEmpty()) {
+                reminderLabel = newReminderValue
+                reminderDate = chosenDate
+                reminderTime = chosenTime
+                reminderSet = true
+                // clear text field when new reminder is set
+                newReminderValue = ""
+                scope.launch {
+                    // dismiss current snackbar if active
+                    snackbarHostState.currentSnackbarData?.dismiss()
+
+                    snackbarHostState.showSnackbar("Reminder was set successfully!")
+                }
+            }
+            else{
+                scope.launch {
+                    // dismiss current snackbar if active
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    snackbarHostState.showSnackbar("Please enter a valid reminder!")
+                }
+            }
         })
     }) { innerPadding ->
         LazyColumn(modifier=Modifier.padding(innerPadding).padding(8.dp)) {
@@ -228,6 +256,12 @@ fun AppLayout() {
                 item {
                     ReminderEntry(reminderLabel, reminderDate, reminderTime) {
                         reminderSet = false
+                        scope.launch {
+                            // dismiss current snackbar if active
+                            snackbarHostState.currentSnackbarData?.dismiss()
+
+                            snackbarHostState.showSnackbar("Reminder was cleared successfully!")
+                        }
                     }
                 }
             }
